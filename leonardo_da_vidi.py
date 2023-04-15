@@ -4,119 +4,64 @@ from ..bot_control import Move
 from pprint import pprint
 import math
 
+debug_start = 300
 debug = False
+use_full_map = False
+
 if debug:
     import matplotlib.pyplot as plt
 import time
 
+id_moves = [Move.RIGHT, Move.UP, Move.LEFT, Move.LEFT, Move.DOWN, Move.DOWN, Move.RIGHT, Move.RIGHT]
+
 class LeonardoDaVidi:
 
     def __init__(self):
-        self.gridmap = np.zeros((1, 1), dtype=np.float64)
         self.myid = 0
+        self.grid = None
+        self.enemies = None
+        self.game_info = None         
+
+        if use_full_map:
+            self.gridmap = np.zeros((1, 1), dtype=np.float64)
+            self.enemymap = np.zeros((1, 1), dtype=np.float64)
 
         if debug:
             self.fig = None
             self.ax = None
             self.fig, self.ax = plt.subplots()
-        
-        
+            self.tiles_moved = 0
+            self.tiles_writen = 0
 
+        self.moveType = 1
+    
     def get_name(self):
         return "LeonardoDaVidi"
 
     def get_contributor(self):
         return "Bram Fenijn"
     
+    def determine_new_tile_colour(self, bot_colour, floor_colour):
+        if floor_colour == 0: return bot_colour # Bot always paints a white floor tile
+        return [floor_colour, 0, bot_colour][(bot_colour - floor_colour) % 3]
+    
     def can_overwrite(self, id, tile):
         if tile == 0: return True
         return (id - tile) % 3 == 2
-
-    def find_highest_average_area(self):
-        max_average = 0
-        max_average_pos = (0,0)
-
-        # return max_average_pos
-    
-        for i in range(4,self.gridmap.shape[0] - 7):
-            for j in range(4,self.gridmap.shape[1] - 7):
-                # Get 8x8 subarray
-                subarray = self.gridmap[i:i+8, j:j+8]
-                # Compute average of subarray
-                subarray_average = np.average(subarray)
-                # Check if subarray average is higher than current max average
-                
-                if subarray_average > max_average:
-                    print('more')
-                    max_average = subarray_average
-                    max_average_pos = (j,i)
-                print(f'pos: [{i},{j}],  subarray_average:{subarray_average}, max_average:{max_average}')
-
-        return max_average_pos
-    
-    def convolve2d(self, image, kernel, mode='same', boundary='fill'):
-        # Define padding depending on boundary conditions
-        if boundary == 'fill':
-            padding = [(kernel.shape[0]-1)//2, (kernel.shape[1]-1)//2]
-            padded_image = np.pad(image, padding, mode='constant', constant_values=0)
-        elif boundary == 'symm':
-            padding = [(kernel.shape[0]-1)//2, (kernel.shape[1]-1)//2]
-            padded_image = np.pad(image, padding, mode='symmetric')
-        elif boundary == 'wrap':
-            padded_image = np.pad(image, kernel.shape[0]-1, mode='wrap')
-        else:
-            raise ValueError('Invalid boundary condition')
-        
-        # Compute output size depending on mode
-        if mode == 'same':
-            output_size = image.shape
-        elif mode == 'valid':
-            output_size = (image.shape[0] - kernel.shape[0] + 1, image.shape[1] - kernel.shape[1] + 1)
-        else:
-            raise ValueError('Invalid mode')
-        
-        # Compute convolution
-        output = np.zeros(output_size, dtype=image.dtype)
-        for i in range(output_size[0]):
-            for j in range(output_size[1]):
-                output[i,j] = np.sum(padded_image[i:i+kernel.shape[0], j:j+kernel.shape[1]] * kernel)
-        
-        return output
-
-    def find_n_smooth_peaks(self, n, window_size=11):
-        smoothed_map = self.gridmap.copy()
-        # apply a moving average filter to smooth the map
-        kernel = np.ones((window_size, window_size)) / (window_size * window_size)
-        smoothed_map = self.convolve2d(smoothed_map, kernel, mode="same", boundary="symm")
-        # initialize peak coordinates list
-        peaks = []
-        for i in range(1, self.gridmap.shape[0] - 1):
-            for j in range(1, self.gridmap.shape[1] - 1):
-                # check if the current element is a peak
-                if (smoothed_map[i,j] > smoothed_map[i-1,j] and 
-                    smoothed_map[i,j] > smoothed_map[i+1,j] and 
-                    smoothed_map[i,j] > smoothed_map[i,j-1] and 
-                    smoothed_map[i,j] > smoothed_map[i,j+1]):
-                    # add the current peak to the list of peaks
-                    peaks.append((i,j))
-        # sort the peaks by their values in descending order
-        sorted_peaks = sorted(peaks, key=lambda x: self.gridmap[x[0],x[1]], reverse=True)
-        # return the n highest peaks
-        return sorted_peaks[:n]
-
                 
 
-    def display_gridmap(self,target_pos, enemies, peak_list):
+    def display_gridmap(self):
         self.ax.clear()
-        
-        
         plt.ion()
         
-        self.ax.imshow(self.gridmap, cmap='PRGn', origin='lower', vmin= -1, vmax= 1) #
-        for enemie in enemies:
+        self.ax.imshow(self.gridmap, cmap='PRGn', origin='lower') #, vmin= -1, vmax= 1
+        for enemie in self.enemies:
             circle = plt.Circle(enemie["position"], 0.5, color='r', fill=False)
-            if self.can_overwrite(self.myid, enemie["id"]):
+            new_tile = self.determine_new_tile_colour(self.myid, enemie["id"])
+            if new_tile == self.myid:
                 circle = plt.Circle(enemie["position"], 0.5, color='g', fill=False)
+            if new_tile == 0:
+                circle = plt.Circle(enemie["position"], 0.5, color='y', fill=False)
             if enemie["id"] == self.myid:
                 circle = plt.Circle(enemie["position"], 0.5, color='b', fill=True)
             
@@ -126,191 +71,236 @@ class LeonardoDaVidi:
         #     rec = plt.Rectangle ((target_pos[0]-2, target_pos[1]-2), 4,4, color='w', fill=False)
         #     self.ax.add_patch(rec)
 
-        for peak in peak_list:
-            rec = plt.Rectangle ((peak[1]-2, peak[0]-2), 4,4, color='w', fill=False)
-            self.ax.add_patch(rec)
+        # for peak in peak_list:
+        #     rec = plt.Rectangle ((peak[1]-2, peak[0]-2), 4,4, color='w', fill=False)
+        #     self.ax.add_patch(rec)
 
         plt.grid(True)
         plt.show()
         plt.pause(0.001)
     
-    def get_enemie_score(self, pos, enemies): # high score is good
+    def get_enemie_score(self, pos): # high score is good
         score = 0.0
 
-        for enemie in enemies:
+        for enemie in self.enemies:
             if enemie["id"] == self.myid:
                 continue
 
             distance = math.dist(enemie["position"], pos)
             max_dis = 10
-            distance = min(max_dis, distance)
+            if distance > max_dis:
+                continue
+            # distance = min(max_dis, distance)
 
+            new_tile = self.determine_new_tile_colour(self.myid, enemie["id"])
+            if new_tile == enemie["id"]: # cant clear
+                distance_score = (max_dis - distance) / max_dis
+                # if distance == 0:
+                #     distance_score = -1.0
+                score -= distance_score * 0.5
 
-            if self.can_overwrite(self.myid, enemie["id"]):
+            elif new_tile == 0: # can clear
                 distance_score = (max_dis - distance) / max_dis
                 if distance == 0:
-                    distance_score = -0.5
+                    distance_score = -0.8
+                score -= distance_score * 0.3
 
-                # print(f'enemie: {enemie["id"]}, can override, dis:{distance}, score:{distance_score}')
-                score += distance_score * 1.0
-            else:
+            else:# new_tile == self.myid: can overrite
                 distance_score = (max_dis - distance) / max_dis
-                # print(f'enemie: {enemie["id"]}, cant override, dis:{distance}, score:{distance_score}')
-                score -= distance_score * 1.0
+                if distance == 0:
+                    distance_score = -2.0
+                if distance == 1:
+                    distance_score *= 0.5
+                score += distance_score * 0.5
 
         score = min(max(score, -1), 1)
               
 
         return score
     
-    def calculate_tile_score(self, pos, grid, enemies, use_tile_score = True, use_enemies_score = True):
+    def calculate_tile_score(self, pos, use_tile_score = True, use_enemies_score = True):
         score = 0
-        if use_tile_score:
-            tile_value = grid[pos[0]][pos[1]]
-            if tile_value == 0:
-                score = 0.5 # is white, can override
-            elif self.can_overwrite(self.myid, tile_value):
-                score = 0.8 # is other player, can override, (if we overrite this we remove % from other)
-            elif tile_value == self.myid:
-                score = -0.8 # my id will do nothing
-            else:
-                score = -0.5 # cant overrite wil only remove from other player 
-
+        # print(self.grid)
         if use_enemies_score:
-            score += self.get_enemie_score((pos[1],pos[0]), enemies) * 1.0
-        return min(max(score, -1), 1)
+            score = self.get_enemie_score((pos[1], pos[0])) * 1.0
+            # print(score)
+            # score = self.enemymap[pos[0]][pos[1]]
 
-    def gridmap_update(self, grid, enemies):
+        if use_tile_score:
+            
+            tile_value = self.grid[pos[0]][pos[1]]
+            # print(tile_value)
+            new_tile = self.determine_new_tile_colour(self.myid, tile_value)
+
+            if tile_value == 0: # is white, can override
+                score += 0.6
+
+            elif tile_value != self.myid and new_tile == self.myid: # is other player, can override, (if we overrite this we remove % from other)
+                score += 0.8 
+
+            elif new_tile == 0: # is other player, can clear, (if we clear this we remove % from other)
+                score = -0.4 
+
+            elif new_tile != 0: # is other player, cant clear.
+                score = -0.8
+
+            elif tile_value == self.myid:
+                score = -1.0 # my id will do nothing
+
+        return score#min(max(score, -1), 1)
+
+    def gridmap_update(self):
         for i in range(self.gridmap.shape[0]):
             for j in range(self.gridmap.shape[1]):
-                self.gridmap[i][j] = self.calculate_tile_score((i,j), grid, enemies)
-                
+                self.gridmap[i][j] = self.calculate_tile_score((i,j))
 
-    def path_plan(self):
-        path = []
-        return path
+    def enemymap_update(self):
+        for i in range(self.enemymap.shape[0]):
+            for j in range(self.enemymap.shape[1]):
+                self.enemymap[i][j] = self.get_enemie_score((j,i)) * 1.0
+    
 
     def get_grid_tile(self, pos, x=0, y=0):
-        if pos[1] + x < 0 or pos[1] + x > self.gridmap.shape[0]-1:
+        if pos[1] + x < 0 or pos[1] + x > self.grid.shape[0]-1:
             return -1.0
-        if pos[0] + y < 0 or pos[0] + y > self.gridmap.shape[1]-1:
+        if pos[0] + y < 0 or pos[0] + y > self.grid.shape[1]-1:
             return -1
         
-        return self.gridmap[pos[1] + x][pos[0]+y]
+        if use_full_map and self.game_info.current_round > debug_start:
+            return self.gridmap[pos[1] + x][pos[0]+y]
+        else:
+            return self.calculate_tile_score((pos[1]+ x,pos[0]+y))
     
-    def determine_move(self, target):
+    def find_better_move(self):
+        for i in range(20):
+            if self.get_grid_tile(self.position, 0, i) > 0:
+                return Move.RIGHT
+            if self.get_grid_tile(self.position, 0, -i) > 0:
+                return Move.LEFT
+            if self.get_grid_tile(self.position, i, 0) > 0:
+                return Move.UP
+            if self.get_grid_tile(self.position, -i, 0) > 0:
+                return Move.DOWN
+        print("Did not find high spot")
+        return Move.UP
+    
+    def find_better_move2(self):
+        score_right = 0.0
+        score_left = 0.0
+        score_up = 0.0
+        score_down = 0.0
+        scan_range = 10
+        for i in range(scan_range):
+            multiplier = (scan_range - i) / (scan_range/2)
+            score_right += self.get_grid_tile(self.position, 0, i) * multiplier
+            score_left += self.get_grid_tile(self.position, 0, -i) * multiplier
+            score_up += self.get_grid_tile(self.position, i, 0) * multiplier
+            score_down += self.get_grid_tile(self.position, -i, 0) * multiplier
+
+        highest = -10.0
+        next_move = Move.UP
+        if score_right > highest:
+            highest = score_right
+            next_move = Move.RIGHT
+
+        if score_left > highest:
+            highest = score_left
+            next_move = Move.LEFT
+
+        if score_up > highest:
+            highest = score_up
+            next_move = Move.UP
+
+        if score_down > highest:
+            highest = score_down
+            next_move = Move.DOWN
+        # print(f"best move was: {next_move} r:{score_right}, l:{score_left}, u:{score_up}, d:{score_down}")
+        return next_move
+    
+    def simple_move(self):
         move = Move.STAY
-        
-        max = -1.0
-        if debug:
-            print(f'pos: [{self.position[1]},{self.position[0]}]')
+        max = -10.0
 
         tile = self.get_grid_tile(self.position, 0, 1)
-        if debug:
-            print(f'right: {tile}')
         if tile > max:
             max = tile
             move = Move.RIGHT
 
         tile = self.get_grid_tile(self.position, 0, -1)
-        if debug:
-            print(f'left: {tile}')
         if tile > max:
             max = tile
             move = Move.LEFT
 
         tile = self.get_grid_tile(self.position, 1, 0)
-        if debug:
-            print(f'up: {tile}')
         if tile > max:
             max = tile
             move = Move.UP
 
         tile = self.get_grid_tile(self.position, -1, 0)
-        if debug:
-            print(f'down: {tile}')
         if tile > max:
             max = tile
             move = Move.DOWN
 
-
-        if debug:
-            print(f'max: {max} move: {move}')
+        if max < 0:
+            # print("Change move type")
+            # self.moveType = 2
+            move = self.find_better_move()
       
         if move == Move.STAY:
             move = Move.DOWN
 
         return move
     
+    def determine_move(self):
+        
+        if self.moveType == 1:
+            return self.simple_move()
+        elif self.moveType == 2:
+            return self.find_better_move2()
+        
+    
     def determine_next_move(self, grid, enemies, game_info):
         pos_x = self.position[0]
         pos_y = self.position[1]
         grid_size = grid.shape[0]
 
-        self.myid = self.id
-        if self.gridmap.shape[0] == 1 or True:
-            self.gridmap = np.zeros((grid_size, grid_size), dtype=np.float64)
-        
-        self.gridmap_update(grid, enemies)
+        self.grid = grid
+        self.enemies = enemies
+        self.myid = self.id 
+        self.game_info = game_info
 
-        # peak_list = self.find_n_smooth_peaks(3)
-        # target_pos = self.find_highest_average_area()
-        target_pos = (0,0)
-        peak_list = []
-        # print(target_pos)
+        if (game_info.current_round - 1) < len(id_moves):
+            return id_moves[game_info.current_round-1]
 
-        next_move = self.determine_move(target_pos)
+        if use_full_map and game_info.current_round > debug_start:
+            if self.gridmap.shape[0] == 1:
+                self.gridmap = np.zeros((grid_size, grid_size), dtype=np.float64)
+                self.enemymap = np.zeros((grid_size, grid_size), dtype=np.float64)
+            self.enemymap_update()
+            self.gridmap_update()
 
-        if debug:
-            self.display_gridmap(target_pos, enemies, peak_list)
+        next_move = self.determine_move()
+
+        if debug and game_info.current_round > debug_start:
+            self.display_gridmap()
+
+        # if debug:
+        #     self.tiles_moved+=1
+        #     i = 0
+        #     j = 0
+        #     if next_move == Move.DOWN:
+        #         j = -1
+        #     if next_move == Move.UP:
+        #         j = 1
+        #     if next_move == Move.LEFT:
+        #         i = -1
+        #     if next_move == Move.RIGHT:
+        #         i = 1
+
+        #     tile_value = grid[self.position[0]+i][self.position[1]+j]
+        #     if self.can_overwrite(self.myid, tile_value):
+        #         self.tiles_writen+=1
+        #     print(f'writen tiles: {self.tiles_writen} {(self.tiles_writen / self.tiles_moved) * 100}%')
 
         return next_move
     
-
-# Tournament finished in 4335 seconds
-# Ran tournament of 200 games of 2000 rounds each.
-# ============================================================
-# The Final Scores
-# ============================================================
-# Rank Name                          Contributor         Avg [us]       Score    
-# 1    Hein Won't Let Me Cheat       Lewie               930.355        8.676   %
-# 2    Atilla the Attacker           Jorik de Vries      874.738        8.205   %
-# 3    Kadabra                       Rayman              603.089        7.639   %
-# 4    Picasso                       Daniel              587.833        6.936   %
-# 5    Abra                          Rayman              126.965        6.442   %
-# 6    LeonardoDaVidi                Bram Fenijn         80653.641      6.233   %
-# 7    The Clueless African          JP Potgieter        49.336         5.855   %
-# 8    Short Sighted Steve           Nobleo              84.727         5.409   %
-# 9    Greedy Gerard                 Rayman              71.357         4.756   %
-# 10   LeaRoundo Da Vinci            Hein                820.601        4.32    %
-# 11   Big Ass Bot                   Mahmoud             82.598         4.129   %
-# 12   Vector                        Ishu                20.281         4.127   %
-# 13   ShortSpanDog                  Felipe              20.826         4.122   %
-# 14   Rambo The Rando               Nobleo              20.199         4.068   %
-# 15   Aslan                         Hakan               21.092         4.054   %
-# 16   RapidRothko                   Jorik de Vries      11.06          3.663   %
-# 17   RickbrandtVanRijn             Rick Voogt          2.108          0.079   %
-
-
-
-# ============================================================
-# Best Efficiency
-# ============================================================
-# Rank Name                          Contributor         Avg [us]       Score [%]   Efficiency [%/us]
-# 1    RapidRothko                   Jorik de Vries      11.06          3.663       0.331
-# 2    Vector                        Ishu                20.281         4.127       0.203
-# 3    Rambo The Rando               Nobleo              20.199         4.068       0.201
-# 4    ShortSpanDog                  Felipe              20.826         4.122       0.198
-# 5    Aslan                         Hakan               21.092         4.054       0.192
-# 6    The Clueless African          JP Potgieter        49.336         5.855       0.119
-# 7    Greedy Gerard                 Rayman              71.357         4.756       0.067
-# 8    Short Sighted Steve           Nobleo              84.727         5.409       0.064
-# 9    Abra                          Rayman              126.965        6.442       0.051
-# 10   Big Ass Bot                   Mahmoud             82.598         4.129       0.05
-# 11   RickbrandtVanRijn             Rick Voogt          2.108          0.079       0.037
-# 12   Kadabra                       Rayman              603.089        7.639       0.013
-# 13   Picasso                       Daniel              587.833        6.936       0.012
-# 14   Atilla the Attacker           Jorik de Vries      874.738        8.205       0.009
-# 15   Hein Won't Let Me Cheat       Lewie               930.355        8.676       0.009
-# 16   LeaRoundo Da Vinci            Hein                820.601        4.32        0.005
-# 17   LeonardoDaVidi                Bram Fenijn         80653.641      6.233       0.0
