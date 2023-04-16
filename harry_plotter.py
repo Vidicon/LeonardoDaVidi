@@ -10,7 +10,7 @@ Y = 1 # Move.DOWN is towarts Y 0, Move.UP is towarts max Y
 debug = False
 id_moves = [Move.RIGHT, Move.UP, Move.LEFT, Move.LEFT, Move.DOWN, Move.DOWN, Move.RIGHT, Move.RIGHT]
 
-class AHall:
+class HarryPlotter:
 
     def __init__(self):
         self.myid = 0
@@ -25,7 +25,7 @@ class AHall:
         self.target = 0
     
     def get_name(self):
-        return "AHall"
+        return "Harry Plotter ( " + str(self.target) + " )"
 
     def get_contributor(self):
         return "Bram Fenijn"
@@ -212,7 +212,7 @@ class AHall:
             self.detect_friend()
             return next_move
         
-        if self.game_info.current_round % 20 == 0 or self.target == 0:
+        if self.game_info.current_round % 25 == 0 or self.target == 0:
             highscores = self.find_high_score_list()
             # pprint(highscores)
             for enemy in highscores:
