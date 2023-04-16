@@ -98,6 +98,16 @@ class HarryPlotter:
         # print(f"pos: x:{pos[1]}, y:{pos[0]}, ofset: x:{x},y:{y}")
         return self.grid[pos[Y] + y][pos[X] + x]      
     
+    def get_next_move_grid_tile(self, move):
+        if move == Move.UP:
+            return self.get_grid_tile(self.position, 0, 1)
+        if move == Move.DOWN:
+            return self.get_grid_tile(self.position, 0, -1)
+        if move == Move.LEFT:
+            return self.get_grid_tile(self.position, 0, -1)
+        if move == Move.RIGHT:
+            return self.get_grid_tile(self.position, 0, 1)
+    
     def find_target_tiles_move(self):
         move = Move.STAY
         x_steps = 1
@@ -208,9 +218,9 @@ class HarryPlotter:
         if len(self.friend) == 0:
             self.friend.append(self.id)
 
-        if len(self.friend) == 1:
-            self.detect_friend()
-            return next_move
+        # if len(self.friend) == 1:
+        #     self.detect_friend()
+        #     return next_move
         
         if self.game_info.current_round % 25 == 0 or self.target == 0:
             highscores = self.find_high_score_list()
@@ -225,7 +235,11 @@ class HarryPlotter:
                     # print(f"Target is {self.target}")
                     break
                             
-        
-        return self.find_move()
+        move = self.find_move()
+
+        # if self.get_next_move_grid_tile(move) in self.friend:
+        #     move = Move.STAY
+
+        return move
         
     
