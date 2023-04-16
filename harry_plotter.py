@@ -235,11 +235,11 @@ class HarryPlotter:
                     # print(f"Target is {self.target}")
                     break
                             
-        move = self.find_move()
+        next_move = self.find_move()
 
         # if self.get_next_move_grid_tile(move) in self.friend:
         #     move = Move.STAY
 
-        return move
+        return next_move
         
     

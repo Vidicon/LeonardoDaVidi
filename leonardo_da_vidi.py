@@ -17,16 +17,16 @@ id_moves = [Move.RIGHT, Move.UP, Move.LEFT, Move.LEFT, Move.DOWN, Move.DOWN, Mov
 class LeoConfig:
     def __init__(self):
 
-        self.score_multiplier_enemie = 1.0
+        self.score_multiplier_enemie = 0.5
         self.score_multiplier_tile = 1.0
-        self.score_multiplier_neighbour = 0.5
+        self.score_multiplier_neighbour = 0.8
 
         # enemy score
         self.max_enemie_distance = 10
-        self.avoid_all = True
+        self.avoid_all = False
         self.enemie_can_write_multiplier = 0.8
-        self.enemie_cant_clear_multiplier = -0.5
-        self.enemie_can_clear_multiplier = -0.3
+        self.enemie_cant_clear_multiplier = -0.1
+        self.enemie_can_clear_multiplier = -0.6
         
         # tile score
         self.tile_white = 0.6
@@ -141,7 +141,7 @@ class LeonardoDaVidi:
                     distance_score *= 0.5
                 score += distance_score * self.config.enemie_can_write_multiplier
 
-        score = min(max(score, -1), 1)
+        # score = min(max(score, -1), 1)
               
 
         return score
@@ -291,6 +291,40 @@ class LeonardoDaVidi:
         # print(f"best move was: {next_move} r:{score_right}, l:{score_left}, u:{score_up}, d:{score_down}")
         return next_move
     
+    def find_better_move3(self):
+        score_right = 0.0
+        score_left = 0.0
+        score_up = 0.0
+        score_down = 0.0
+        scan_range = 10
+        for i in range(scan_range):
+            multiplier = (scan_range - i) / (scan_range/2)
+            multiplier *= multiplier
+            score_right += self.get_grid_tile(self.position, 0, i) * multiplier
+            score_left += self.get_grid_tile(self.position, 0, -i) * multiplier
+            score_up += self.get_grid_tile(self.position, i, 0) * multiplier
+            score_down += self.get_grid_tile(self.position, -i, 0) * multiplier
+
+        highest = -10.0
+        next_move = Move.UP
+        if score_right > highest:
+            highest = score_right
+            next_move = Move.RIGHT
+
+        if score_left > highest:
+            highest = score_left
+            next_move = Move.LEFT
+
+        if score_up > highest:
+            highest = score_up
+            next_move = Move.UP
+
+        if score_down > highest:
+            highest = score_down
+            next_move = Move.DOWN
+        # print(f"best move was: {next_move} r:{score_right}, l:{score_left}, u:{score_up}, d:{score_down}")
+        return next_move
+    
     def simple_move(self):
         move = Move.STAY
         max = -10.0
@@ -318,7 +352,7 @@ class LeonardoDaVidi:
         if max < 0:
             # print("Change move type")
             # self.moveType = 2
-            move = self.find_better_move()
+            move = self.find_better_move3()
       
         if move == Move.STAY:
             move = Move.DOWN
@@ -330,6 +364,8 @@ class LeonardoDaVidi:
             return self.simple_move()
         elif self.moveType == 2:
             return self.find_better_move2()
+        elif self.moveType == 3:
+            return self.find_better_move3()
         
     def find_high_score_list(self):
         tile_counts = np.zeros((len(self.enemies)+1), dtype=np.int16)
